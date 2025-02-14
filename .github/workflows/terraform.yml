@@ -45,12 +45,13 @@
 name: 'Terraform'
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-
-permissions:
-  contents: read
+  workflow_dispatch:
+    # Inputs the workflow expects.
+    inputs:
+      tfpath:
+        description: 'TF File Path'
+        required: false
+        default: 'aws_samples/create_ec2'
 
 jobs:
   terraform:
