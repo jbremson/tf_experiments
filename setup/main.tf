@@ -33,8 +33,8 @@ resource "aws_security_group" "private_sg" {
   vpc_id = aws_vpc.my_vpc.id
 
   ingress {
-    from_port   = 22
-    to_port     = 22
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["10.0.1.0/24"] # Allow SSH from the private subnet
   }
