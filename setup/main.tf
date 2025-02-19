@@ -28,13 +28,23 @@ resource "aws_subnet" "private_subnet" {
   map_public_ip_on_launch = false
 }
 
+resource "aws_iam_role_policy_attachment" "ssm_policy_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  role       = aws_iam_role.ec2_ssm_role.name
+}
+
+resource "aws_iam_instance_profile" "ec2_ssm_instance_profile" {
+  name = "ec2_ssm_instance_profile"
+  role = aws_iam_role.ec2_ssm_role.name
+}
+
 # Step 3: Create a Security Group
 resource "aws_security_group" "private_sg" {
   vpc_id = aws_vpc.my_vpc.id
 
   ingress {
-    from_port   = 443
-    to_port     = 443
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["10.0.1.0/24"] # Allow SSH from the private subnet
   }
@@ -54,6 +64,11 @@ resource "aws_instance" "my_instance" {
   subnet_id     = aws_subnet.private_subnet.id
   security_groups = [aws_security_group.private_sg.id]
   iam_instance_profile = aws_iam_instance_profile.ec2_ssm_instance_profile.name
+
+  ignore_changes = [
+    # Ignore changes to the instance's tags
+    tags, ami
+  ]
 }
 
 # Step 5: Create an S3 Gateway Endpoint
@@ -61,6 +76,24 @@ resource "aws_vpc_endpoint" "s3_endpoint" {
   vpc_id       = aws_vpc.my_vpc.id
   service_name = "com.amazonaws.us-east-1.s3"
   route_table_ids = [aws_vpc.my_vpc.main_route_table_id]
+}
+
+resource "aws_vpc_endpoint" "ssm" {
+  vpc_id            = aws_vpc.my_vpc.id
+  service_name      = "com.amazonaws.us-east-1.ssm"  # Change region as needed
+  route_table_ids   = [aws_vpc.my_vpc.main_route_table_id]
+}
+
+resource "aws_vpc_endpoint" "ssm_messages" {
+  vpc_id            = aws_vpc.my_vpc.id
+  service_name      = "com.amazonaws.us-east-1.ssmmessages"  # Change region as needed
+  route_table_ids   = [aws_vpc.my_vpc.main_route_table_id]
+}
+
+resource "aws_vpc_endpoint" "ec2_messages" {
+  vpc_id            = aws_vpc.my_vpc.id
+  service_name      = "com.amazonaws.us-east-1.ec2messages"  # Change region as needed
+  route_table_ids   = [aws_vpc.my_vpc.main_route_table_id]
 }
 
 resource "aws_iam_role" "ec2_ssm_role" {
@@ -81,14 +114,3 @@ resource "aws_iam_role" "ec2_ssm_role" {
   })
 }
 
-# Attach the AmazonSSMManagedInstanceCore policy
-resource "aws_iam_role_policy_attachment" "ssm_policy_attachment" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-  role       = aws_iam_role.ec2_ssm_role.name
-}
-
-# Step 2: Create Instance Profile
-resource "aws_iam_instance_profile" "ec2_ssm_instance_profile" {
-  name = "ec2_ssm_instance_profile"
-  role = aws_iam_role.ec2_ssm_role.name
-}

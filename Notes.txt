@@ -1,0 +1,83 @@
+Notes
+
+2/18/2025
+
+To add a VPC endpoint in Terraform so that instances in a private subnet can use AWS Systems Manager (SSM) Connect, you will need to create two types of VPC endpoints: one for SSM and another for SSM messages. Below is an example of how to configure this in your Terraform script.
+
+Terraform Configuration
+Text Only
+provider "aws" {
+  region = "us-west-2"  # Change to your desired region
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_subnet" "private" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "us-west-2a"  # Change as needed
+}
+
+resource "aws_vpc_endpoint" "ssm" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.us-west-2.ssm"  # Change region as needed
+  route_table_ids   = [aws_subnet.private.id]
+}
+
+resource "aws_vpc_endpoint" "ssm_messages" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.us-west-2.ssmmessages"  # Change region as needed
+  route_table_ids   = [aws_subnet.private.id]
+}
+
+resource "aws_vpc_endpoint" "ec2_messages" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.us-west-2.ec2messages"  # Change region as needed
+  route_table_ids   = [aws_subnet.private.id]
+}
+
+resource "aws_iam_role" "ssm_role" {
+  name = "SSMRole"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action    = "sts:AssumeRole"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Effect    = "Allow"
+        Sid       = ""
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  role       = aws_iam_role.ssm_role.name
+}
+
+resource "aws_instance" "private_instance" {
+  ami           = "ami-0c55b159cbfafe1f0"  # Change to your desired AMI
+  instance_type = "t2.micro"
+  subnet_id     = aws_subnet.private.id
+
+  iam_instance_profile = aws_iam_instance_profile.ssm_instance_profile.name
+}
+
+resource "aws_iam_instance_profile" "ssm_instance_profile" {
+  name = "SSMInstanceProfile"
+  role = aws_iam_role.ssm_role.name
+}
+Explanation
+VPC and Subnet: The script creates a VPC and a private subnet where your EC2 instances will reside.
+VPC Endpoints:
+SSM Endpoint: Allows communication with the SSM service.
+SSM Messages Endpoint: Facilitates the messaging service for SSM.
+EC2 Messages Endpoint: Required for SSM to manage EC2 instances.
+IAM Role and Policy: An IAM role is created and attached to the EC2 instance, allowing it to communicate with SSM.
+EC2 Instance: An EC2 instance is launched in the private subnet with the IAM role attached.
