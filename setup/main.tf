@@ -62,13 +62,11 @@ resource "aws_instance" "my_instance" {
   ami           = "ami-053a45fff0a704a47" # Replace with a valid AMI ID
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.private_subnet.id
-  security_groups = [aws_security_group.private_sg.id]
+  vpc_security_group_ids = [aws_security_group.private_sg.id]
   iam_instance_profile = aws_iam_instance_profile.ec2_ssm_instance_profile.name
 
-  ignore_changes = [
-    # Ignore changes to the instance's tags
-    tags, ami
-  ]
+
+
 }
 
 # Step 5: Create an S3 Gateway Endpoint
