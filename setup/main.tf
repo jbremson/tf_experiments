@@ -49,7 +49,7 @@ resource "aws_security_group" "private_sg" {
 
 # Step 4: Create an EC2 Instance
 resource "aws_instance" "my_instance" {
-  ami           = "ami-0c55b159cbfafe1f0" # Replace with a valid AMI ID
+  ami           = "ami-053a45fff0a704a47" # Replace with a valid AMI ID
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.private_subnet.id
   security_groups = [aws_security_group.private_sg.name]
