@@ -79,19 +79,19 @@ resource "aws_vpc_endpoint" "s3_endpoint" {
 resource "aws_vpc_endpoint" "ssm" {
   vpc_id            = aws_vpc.my_vpc.id
   service_name      = "com.amazonaws.us-east-1.ssm"  # Change region as needed
-  route_table_ids   = [aws_vpc.my_vpc.main_route_table_id]
+  vpc_endpoint_type = "Interface"
 }
 
 resource "aws_vpc_endpoint" "ssm_messages" {
   vpc_id            = aws_vpc.my_vpc.id
   service_name      = "com.amazonaws.us-east-1.ssmmessages"  # Change region as needed
-  route_table_ids   = [aws_vpc.my_vpc.main_route_table_id]
+  vpc_endpoint_type = "Interface"
 }
 
 resource "aws_vpc_endpoint" "ec2_messages" {
   vpc_id            = aws_vpc.my_vpc.id
   service_name      = "com.amazonaws.us-east-1.ec2messages"  # Change region as needed
-  route_table_ids   = [aws_vpc.my_vpc.main_route_table_id]
+  vpc_endpoint_type = "Interface"
 }
 
 resource "aws_iam_role" "ec2_ssm_role" {
