@@ -52,12 +52,12 @@ resource "aws_instance" "my_instance" {
   ami           = "ami-053a45fff0a704a47" # Replace with a valid AMI ID
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.private_subnet.id
-  security_groups = [aws_security_group.private_sg.name]
+  security_groups = [aws_security_group.private_sg.id]
 }
 
 # Step 5: Create an S3 Gateway Endpoint
 resource "aws_vpc_endpoint" "s3_endpoint" {
   vpc_id       = aws_vpc.my_vpc.id
   service_name = "com.amazonaws.us-east-1.s3"
-  route_table_ids = [aws_subnet.private_subnet.id]
+  route_table_ids = [aws_vpc.my_vpc.main_route_table_id]
 }
