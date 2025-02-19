@@ -53,6 +53,7 @@ resource "aws_instance" "my_instance" {
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.private_subnet.id
   security_groups = [aws_security_group.private_sg.id]
+  iam_instance_profile = aws_iam_instance_profile.ec2_ssm_instance_profile.name
 }
 
 # Step 5: Create an S3 Gateway Endpoint
@@ -60,4 +61,34 @@ resource "aws_vpc_endpoint" "s3_endpoint" {
   vpc_id       = aws_vpc.my_vpc.id
   service_name = "com.amazonaws.us-east-1.s3"
   route_table_ids = [aws_vpc.my_vpc.main_route_table_id]
+}
+
+resource "aws_iam_role" "ec2_ssm_role" {
+  name = "ec2_ssm_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Effect = "Allow"
+        Sid = ""
+      }
+    ]
+  })
+}
+
+# Attach the AmazonSSMManagedInstanceCore policy
+resource "aws_iam_role_policy_attachment" "ssm_policy_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  role       = aws_iam_role.ec2_ssm_role.name
+}
+
+# Step 2: Create Instance Profile
+resource "aws_iam_instance_profile" "ec2_ssm_instance_profile" {
+  name = "ec2_ssm_instance_profile"
+  role = aws_iam_role.ec2_ssm_role.name
 }
