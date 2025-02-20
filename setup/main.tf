@@ -1,123 +1,159 @@
 provider "aws" {
-  region = "us-east-1"  # Change to your desired region
+  region = "us-east-1" # Replace with your desired region
 }
 
-resource "aws_s3_bucket" "my_bucket" {
-  bucket = "jb-777-bucket"  # Change to a unique bucket name
-  force_destroy = true            # Allows deletion of non-empty bucket
-}
-
-# Enable bucket ownership controls to disable ACLs
-resource "aws_s3_bucket_ownership_controls" "my_bucket_ownership" {
-  bucket = aws_s3_bucket.my_bucket.id
-
-  rule {
-    object_ownership = "BucketOwnerPreferred"
-  }
-}
-
-resource "aws_vpc" "my_vpc" {
-  cidr_block = "10.0.0.0/16"
+# VPC
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
   enable_dns_hostnames = true
-  enable_dns_support = true
-}
-
-# Step 2: Create a Private Subnet
-resource "aws_subnet" "private_subnet" {
-  vpc_id                  = aws_vpc.my_vpc.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "us-east-1a"
-  map_public_ip_on_launch = false
-}
-
-resource "aws_iam_role_policy_attachment" "ssm_policy_attachment" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-  role       = aws_iam_role.ec2_ssm_role.name
-}
-
-resource "aws_iam_instance_profile" "ec2_ssm_instance_profile" {
-  name = "ec2_ssm_instance_profile"
-  role = aws_iam_role.ec2_ssm_role.name
-}
-
-# Step 3: Create a Security Group
-resource "aws_security_group" "private_sg" {
-  vpc_id = aws_vpc.my_vpc.id
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.1.0/24"] # Allow SSH from the private subnet
+  tags = {
+    Name = "ssm-vpc"
   }
+}
+
+# Private Subnet
+resource "aws_subnet" "private" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "us-east-1a" # Adjust based on your region
+  tags = {
+    Name = "private-subnet"
+  }
+}
+
+# Route Table for Private Subnet
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+  tags = {
+    Name = "private-route-table"
+  }
+}
+
+resource "aws_route_table_association" "private" {
+  subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.private.id
+}
+
+# Security Group for EC2 Instance
+resource "aws_security_group" "instance_sg" {
+  vpc_id = aws_vpc.main.id
+  name   = "instance-sg"
 
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1" # Allow all outbound traffic
-    cidr_blocks = ["10.0.0.0/16"] # Allow outbound to the VPC
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # Outbound HTTPS to VPC endpoints
+  }
+
+  tags = {
+    Name = "instance-sg"
   }
 }
 
-# Step 4: Create an EC2 Instance
-resource "aws_instance" "my_instance" {
-  ami           = "ami-053a45fff0a704a47" # Replace with a valid AMI ID
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.private_subnet.id
-  vpc_security_group_ids = [aws_security_group.private_sg.id]
-  iam_instance_profile = aws_iam_instance_profile.ec2_ssm_instance_profile.name
-
-
-
-}
-
-# Step 5: Create an S3 Gateway Endpoint
-resource "aws_vpc_endpoint" "s3_endpoint" {
-  vpc_id       = aws_vpc.my_vpc.id
-  service_name = "com.amazonaws.us-east-1.s3"
-  route_table_ids = [aws_vpc.my_vpc.main_route_table_id]
-
-}
-
-resource "aws_vpc_endpoint" "ssm" {
-  vpc_id            = aws_vpc.my_vpc.id
-  service_name      = "com.amazonaws.us-east-1.ssm"  # Change region as needed
-  subnet_ids =        [aws_subnet.private_subnet.id]
-  vpc_endpoint_type = "Interface"
-  private_dns_enabled = true
-}
-
-resource "aws_vpc_endpoint" "ssm_messages" {
-  vpc_id            = aws_vpc.my_vpc.id
-  service_name      = "com.amazonaws.us-east-1.ssmmessages"  # Change region as needed
-  vpc_endpoint_type = "Interface"
-  private_dns_enabled = true
-
-}
-
-resource "aws_vpc_endpoint" "ec2_messages" {
-  vpc_id            = aws_vpc.my_vpc.id
-  service_name      = "com.amazonaws.us-east-1.ec2messages"  # Change region as needed
-  vpc_endpoint_type = "Interface"
-  private_dns_enabled = true
-
-}
-
-resource "aws_iam_role" "ec2_ssm_role" {
-  name = "ec2_ssm_role"
-
+# IAM Role for EC2 Instance
+resource "aws_iam_role" "ssm_role" {
+  name = "ssm-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Action = "sts:AssumeRole"
+        Effect = "Allow"
         Principal = {
           Service = "ec2.amazonaws.com"
         }
-        Effect = "Allow"
-        Sid = ""
       }
     ]
   })
 }
 
+# Attach SSM Managed Policy
+resource "aws_iam_role_policy_attachment" "ssm_policy" {
+  role       = aws_iam_role.ssm_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+# Instance Profile for EC2
+resource "aws_iam_instance_profile" "ssm_profile" {
+  name = "ssm-profile"
+  role = aws_iam_role.ssm_role.name
+}
+
+# EC2 Instance in Private Subnet
+resource "aws_instance" "private_instance" {
+  ami                    = var.amznLnx2023
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.private.id
+  iam_instance_profile   = aws_iam_instance_profile.ssm_profile.name
+  vpc_security_group_ids = [aws_security_group.instance_sg.id]
+
+  tags = {
+    Name = "ssm-private-instance"
+  }
+}
+
+# Security Group for VPC Endpoints
+resource "aws_security_group" "vpc_endpoint_sg" {
+  vpc_id = aws_vpc.main.id
+  name   = "vpc-endpoint-sg"
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block] # Allow HTTPS from VPC
+  }
+
+  tags = {
+    Name = "vpc-endpoint-sg"
+  }
+}
+
+# VPC Endpoint for SSM
+resource "aws_vpc_endpoint" "ssm" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.us-east-1.ssm"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = [aws_subnet.private.id]
+  security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "ssm-endpoint"
+  }
+}
+
+# VPC Endpoint for EC2 Messages
+resource "aws_vpc_endpoint" "ec2messages" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.us-east-1.ec2messages"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = [aws_subnet.private.id]
+  security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "ec2messages-endpoint"
+  }
+}
+
+# VPC Endpoint for SSM Messages
+resource "aws_vpc_endpoint" "ssmmessages" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.us-east-1.ssmmessages"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = [aws_subnet.private.id]
+  security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "ssmmessages-endpoint"
+  }
+}
+
+# Output Instance ID
+output "instance_id" {
+  value = aws_instance.private_instance.id
+}
