@@ -89,6 +89,13 @@ resource "aws_instance" "private_instance" {
   iam_instance_profile   = aws_iam_instance_profile.ssm_profile.name
   vpc_security_group_ids = [aws_security_group.instance_sg.id]
 
+  user_data = <<-EOF
+            #!/bin/bash
+            yum install -y amazon-ssm-agent
+            systemctl enable amazon-ssm-agent
+            systemctl start amazon-ssm-agent
+            EOF
+
   tags = {
     Name = "ssm-private-instance"
   }
