@@ -18,6 +18,8 @@ resource "aws_s3_bucket_ownership_controls" "my_bucket_ownership" {
 
 resource "aws_vpc" "my_vpc" {
   cidr_block = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support = true
 }
 
 # Step 2: Create a Private Subnet
@@ -74,7 +76,7 @@ resource "aws_vpc_endpoint" "s3_endpoint" {
   vpc_id       = aws_vpc.my_vpc.id
   service_name = "com.amazonaws.us-east-1.s3"
   route_table_ids = [aws_vpc.my_vpc.main_route_table_id]
-  subnet_ids =        [aws_subnet.private_subnet.id]
+
 }
 
 resource "aws_vpc_endpoint" "ssm" {
