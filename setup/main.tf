@@ -136,6 +136,7 @@ resource "aws_instance" "private_instance" {
   instance_type        = "t2.micro"
   subnet_id            = aws_subnet.private.id
   iam_instance_profile = aws_iam_instance_profile.ssm_cloudwatch_profile.name
+  vpc_security_group_ids = [aws_security_group.vpc_endpoint_sg.id]
 
   user_data = <<-EOF
               #!/bin/bash
