@@ -1,107 +1,126 @@
+# Provider configuration
 provider "aws" {
-  region = "us-east-1"
+  region = "us-east-1" # You can change this to your preferred region
 }
 
-# VPC Configuration
+# VPC
 resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
+  cidr_block           = "192.168.0.0/16"
   enable_dns_support   = true
+  enable_dns_hostnames = true
+
   tags = {
-    Name = "MyVPC"
+    Name = "192-main-vpc"
   }
 }
 
-resource "aws_subnet" "public_subnet" {
-  vpc_id                  = aws_vpc.main.id  # Replace with your VPC resource name or ID
-  cidr_block             = "10.0.2.0/24"
-  availability_zone      = "us-east-1a"     # Adjust the AZ based on your region/needs
-  map_public_ip_on_launch = true            # Enables auto-assigning public IPs for public subnet
-
-  tags = {
-    Name = "public-subnet-10-0-2-0"
-  }
-}
-
-
+# Private Subnet
 resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "us-east-1a"
+  cidr_block        = "192.168.1.0/24"
+  availability_zone = "us-east-1a" # Adjust AZ based on your region
+
   tags = {
-    Name = "PrivateSubnet"
+    Name = "private-subnet"
   }
 }
 
+# Route Table for Private Subnet
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
+
   tags = {
-    Name = "PrivateRT"
+    Name = "private-rt"
   }
 }
 
+# Route Table Association
 resource "aws_route_table_association" "private" {
   subnet_id      = aws_subnet.private.id
   route_table_id = aws_route_table.private.id
 }
 
 # Security Group for VPC Endpoints
-resource "aws_security_group" "vpc_endpoint_sg" {
-  vpc_id = aws_vpc.main.id
-  name   = "vpc-endpoint-sg"
+resource "aws_security_group" "vpc_endpoints" {
+  name        = "vpc-endpoints-sg"
+  description = "Security group for VPC endpoints"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
+    cidr_blocks = ["192.168.0.0/16"]
   }
 
   tags = {
-    Name = "VPCEndpointSG"
+    Name = "vpc-endpoints-sg"
   }
 }
 
-# VPC Endpoints for SSM
+# Security Group for EC2 Instance
+resource "aws_security_group" "instance_sg" {
+  name        = "instance-sg"
+  description = "Security group for EC2 instance"
+  vpc_id      = aws_vpc.main.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "instance-sg"
+  }
+}
+
+# SSM VPC Endpoint
 resource "aws_vpc_endpoint" "ssm" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.us-east-1.ssm"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = [aws_subnet.private.id]
-  security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
   private_dns_enabled = true
+
   tags = {
-    Name = "SSMEndpoint"
+    Name = "ssm-endpoint"
   }
 }
 
+# SSMMessages VPC Endpoint
 resource "aws_vpc_endpoint" "ssmmessages" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.us-east-1.ssmmessages"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = [aws_subnet.private.id]
-  security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
   private_dns_enabled = true
+
   tags = {
-    Name = "SSMMessagesEndpoint"
+    Name = "ssmmessages-endpoint"
   }
 }
 
+# EC2Messages VPC Endpoint
 resource "aws_vpc_endpoint" "ec2messages" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.us-east-1.ec2messages"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = [aws_subnet.private.id]
-  security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
   private_dns_enabled = true
+
   tags = {
-    Name = "EC2MessagesEndpoint"
+    Name = "ec2messages-endpoint"
   }
 }
 
-# IAM Configuration
-resource "aws_iam_role" "ssm_cloudwatch_role" {
-  name = "SSM-CloudWatch-Role"
+# IAM Role for SSM
+resource "aws_iam_role" "ssm_role" {
+  name = "ssm-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -115,55 +134,36 @@ resource "aws_iam_role" "ssm_cloudwatch_role" {
   })
 }
 
+# Attach SSM policy to role
 resource "aws_iam_role_policy_attachment" "ssm_policy" {
-  role       = aws_iam_role.ssm_cloudwatch_role.name
+  role       = aws_iam_role.ssm_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-resource "aws_iam_role_policy_attachment" "cloudwatch_policy" {
-  role       = aws_iam_role.ssm_cloudwatch_role.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
-}
-
-resource "aws_iam_instance_profile" "ssm_cloudwatch_profile" {
-  name = "SSM-CloudWatch-Profile"
-  role = aws_iam_role.ssm_cloudwatch_role.name
+# Instance Profile
+resource "aws_iam_instance_profile" "ssm_profile" {
+  name = "ssm-profile"
+  role = aws_iam_role.ssm_role.name
 }
 
 # EC2 Instance
 resource "aws_instance" "private_instance" {
-  ami                  = var.amznLnx2023 # Amazon Linux 2 - update for your region
-  instance_type        = "t2.micro"
-  subnet_id            = aws_subnet.private.id
-  iam_instance_profile = aws_iam_instance_profile.ssm_cloudwatch_profile.name
-  vpc_security_group_ids = [aws_security_group.vpc_endpoint_sg.id]
-
-  user_data = <<-EOF
-              #!/bin/bash
-              yum install -y amazon-cloudwatch-agent
-              echo '{
-                "logs": {
-                  "logs_collected": {
-                    "files": {
-                      "collect_list": [{
-                        "file_path": "/var/log/messages",
-                        "log_group_name": "private-instance-logs",
-                        "log_stream_name": "{instance_id}"
-                      }]
-                    }
-                  }
-                }
-              }' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-              /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-              EOF
+  ami                    = var.amznLnx2023 # Amazon Linux 2 AMI (update based on region)
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.private.id
+  vpc_security_group_ids = [aws_security_group.instance_sg.id]
+  iam_instance_profile   = aws_iam_instance_profile.ssm_profile.name
 
   tags = {
-    Name = "PrivateInstance"
+    Name = "192-private-ec2"
   }
 }
 
-# CloudWatch Log Group
-resource "aws_cloudwatch_log_group" "instance_logs" {
-  name              = "private-instance-logs"
-  retention_in_days = 30
+# Output the instance private IP and ID
+output "instance_private_ip" {
+  value = aws_instance.private_instance.private_ip
+}
+
+output "instance_id" {
+  value = aws_instance.private_instance.id
 }
