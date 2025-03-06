@@ -62,7 +62,7 @@ jobs:
     # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
     defaults:
       run:
-        working-directory: ${{ github.workspace }}/setup
+        working-directory: ${{ github.workspace }}/private_vpc
         shell: bash
 
     steps:
